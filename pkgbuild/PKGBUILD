@@ -10,7 +10,7 @@ _branch=mykernel
 # 本 PKGBUILD 位于内核仓库的 pkgbuild/ 子目录；源码就是父目录这个 git 仓库
 _repo="$(realpath "$(dirname "${BASH_SOURCE[0]}")/..")"
 
-pkgdesc='Custom Linux kernel: CachyOS 7.3 tree + BORE + UKSM (ported) + lru_cast'
+pkgdesc='Custom Linux kernel: CachyOS 7.3 tree + BORE + lru_cast + KSM'
 arch=('x86_64')
 url='https://github.com/CachyOS/linux'
 license=('GPL-2.0-only')
@@ -18,9 +18,10 @@ options=('!strip' '!debug' '!lto')
 
 # The build must use the system toolchain, not miniconda's shadowing gcc/make,
 # and route compilations through ccache (symlinks in /usr/lib/ccache/bin).
+# CCACHE_DIR / CCACHE_SLOPPINESS / CCACHE_UMASK are intentionally NOT set here:
+# they come from the invoking shell (~/.zshrc) so cache keys stay consistent.
 export PATH=/usr/lib/ccache/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin
 export MAKE=/usr/bin/make
-export CCACHE_SLOPPINESS=time_macros
 export LOCALVERSION=""
 
 makedepends=(
@@ -62,15 +63,21 @@ prepare() {
     cp "${srcdir}/config" .config
     make olddefconfig
   fi
+
+  # Kernel release name, used by package()/_package-headers().
+  make -s kernelrelease > version
 }
 
 build() {
   cd "${srcdir}/${_srcname}"
   make -j"$(nproc)" all
+
+  # Needed by the headers package for BPF CO-RE module builds.
+  make -C tools/bpf/bpftool vmlinux.h feature-clang-bpf-co-re=1
 }
 
 _package() {
-  pkgdesc="Custom Linux kernel (CachyOS tree + BORE + UKSM + lru_cast)"
+  pkgdesc="Custom Linux kernel (CachyOS tree + BORE + lru_cast + KSM)"
   depends=(coreutils kmod initramfs)
   optdepends=(
     'wireless-regdb: to set the correct wireless channels of your country'
@@ -106,7 +113,11 @@ _package-headers() {
   local builddir="$pkgdir/usr/lib/modules/$(<version)/build"
 
   install -Dt "$builddir" -m644 .config Makefile Module.symvers System.map \
-    localversion.* version vmlinux
+    version vmlinux
+  # localversion.* files exist only if the version suffix uses them
+  if compgen -G "localversion.*" >/dev/null; then
+    install -Dt "$builddir" -m644 localversion.*
+  fi
   install -Dt "$builddir" -m644 tools/bpf/bpftool/vmlinux.h
   install -Dt "$builddir/kernel" -m644 kernel/Makefile
   install -Dt "$builddir/arch/x86" -m644 arch/x86/Makefile
