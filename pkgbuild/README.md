@@ -33,7 +33,8 @@
 ```bash
 cd pkgbuild
 export PATH=/usr/lib/ccache/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin
-export MAKE=/usr/bin/make CCACHE_SLOPPINESS=time_macros LOCALVERSION=""
+export MAKE=/usr/bin/make LOCALVERSION=""
+# CCACHE_DIR / CCACHE_SLOPPINESS / CCACHE_UMASK 由 ~/.zshrc 提供
 makepkg -s
 ```
 
