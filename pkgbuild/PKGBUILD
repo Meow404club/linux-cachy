@@ -48,8 +48,9 @@ makedepends=(
 source=(
   "git+file://${_repo}#branch=${_branch}"
   "config"
+  "linux-brokestar.preset"
 )
-sha256sums=('SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 pkgname=("$pkgbase" "$pkgbase-headers")
 
@@ -91,6 +92,9 @@ _package() {
     DEPMOD=/doesnt/exist modules_install
 
   rm "$modulesdir"/build
+
+  install -Dm644 "${srcdir}/linux-brokestar.preset" \
+    "$pkgdir/etc/mkinitcpio.d/linux-brokestar.preset"
 }
 
 _package-headers() {

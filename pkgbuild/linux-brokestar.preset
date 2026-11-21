@@ -1,0 +1,5 @@
+ALL_kver="/boot/vmlinuz-linux-brokestar"
+PRESETS=('default' 'fallback')
+default_image="/boot/initramfs-linux-brokestar.img"
+fallback_image="/boot/initramfs-linux-brokestar-fallback.img"
+fallback_options="-S autodetect"
