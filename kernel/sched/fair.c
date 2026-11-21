@@ -97,6 +97,7 @@ unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
 static const unsigned int nsecs_per_tick       = 1000000000ULL / HZ;
 unsigned int sysctl_sched_min_base_slice       = CONFIG_MIN_BASE_SLICE_NS;
 __read_mostly uint sysctl_sched_base_slice     = nsecs_per_tick;
+static unsigned int normalized_sysctl_sched_base_slice = 1000000000ULL / HZ;
 #else /* !CONFIG_SCHED_BORE */
 #ifdef CONFIG_CACHY
 unsigned int sysctl_sched_base_slice			= 400000ULL;
@@ -225,6 +226,7 @@ static inline void update_load_set(struct load_weight *lw, unsigned long w)
 static void update_sysctl(void) {
 	sysctl_sched_base_slice = nsecs_per_tick *
 		max(1UL, DIV_ROUND_UP(sysctl_sched_min_base_slice, nsecs_per_tick));
+	normalized_sysctl_sched_base_slice = sysctl_sched_base_slice;
 }
 void sched_update_min_base_slice(void) { update_sysctl(); }
 #else /* !CONFIG_SCHED_BORE */
