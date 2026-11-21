@@ -1,0 +1,141 @@
+# Maintainer: brokestar
+# Based on CachyOS linux-cachyos-bore, but built from a locally modified
+# source tree (BORE + UKSM + lru_cast merged as commits, no patch files).
+
+pkgbase=linux-brokestar
+pkgver=7.3.5
+pkgrel=1
+_srcname=linux-cachy
+_branch=mykernel
+# 本 PKGBUILD 位于内核仓库的 pkgbuild/ 子目录；源码就是父目录这个 git 仓库
+_repo="$(realpath "$(dirname "${BASH_SOURCE[0]}")/..")"
+
+pkgdesc='Custom Linux kernel: CachyOS 7.3 tree + BORE + UKSM (ported) + lru_cast'
+arch=('x86_64')
+url='https://github.com/CachyOS/linux'
+license=('GPL-2.0-only')
+options=('!strip' '!debug' '!lto')
+
+# The build must use the system toolchain, not miniconda's shadowing gcc/make,
+# and route compilations through ccache (symlinks in /usr/lib/ccache/bin).
+export PATH=/usr/lib/ccache/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/bin
+export MAKE=/usr/bin/make
+export CCACHE_SLOPPINESS=time_macros
+export LOCALVERSION=""
+
+makedepends=(
+  bc
+  binutils
+  cpio
+  gettext
+  glibc
+  libelf
+  libgcc
+  openssl
+  pahole
+  perl
+  python
+  rust
+  rust-bindgen
+  rust-src
+  tar
+  xxhash
+  xz
+  zlib
+  zstd
+)
+
+source=(
+  "git+file://${_repo}#branch=${_branch}"
+  "config"
+)
+sha256sums=('SKIP' 'SKIP')
+
+pkgname=("$pkgbase" "$pkgbase-headers")
+
+prepare() {
+  cd "${srcdir}/${_srcname}"
+
+  # Idempotent: keep an already-built tree intact (no needless reconfigure).
+  if ! cmp -s "${srcdir}/config" .config; then
+    cp "${srcdir}/config" .config
+    make olddefconfig
+  fi
+}
+
+build() {
+  cd "${srcdir}/${_srcname}"
+  make -j"$(nproc)" all
+}
+
+_package() {
+  pkgdesc="Custom Linux kernel (CachyOS tree + BORE + UKSM + lru_cast)"
+  depends=(coreutils kmod initramfs)
+  optdepends=(
+    'wireless-regdb: to set the correct wireless channels of your country'
+    'linux-firmware: firmware images needed for some devices'
+  )
+  provides=(linux-custom VIRTUALBOX-GUEST-MODULES WIREGUARD-MODULE KSMBD-MODULE
+            V4L2LOOPBACK-MODULE NTSYNC-MODULE VHBA-MODULE ADIOS-MODULE)
+  conflicts=(linux-custom)
+
+  cd "${srcdir}/${_srcname}"
+  local modulesdir="$pkgdir/usr/lib/modules/$(<version)"
+
+  install -Dm644 "$(make -s image_name)" "$modulesdir/vmlinuz"
+
+  # Used by mkinitcpio to name the kernel
+  echo "$pkgbase" | install -Dm644 /dev/stdin "$modulesdir/pkgbase"
+
+  ZSTD_CLEVEL=19 make INSTALL_MOD_PATH="$pkgdir/usr" INSTALL_MOD_STRIP=1 \
+    DEPMOD=/doesnt/exist modules_install
+
+  rm "$modulesdir"/build
+}
+
+_package-headers() {
+  pkgdesc="Headers and scripts for building modules for the $pkgbase kernel"
+  depends=(binutils glibc libelf libgcc openssl pahole xxhash zlib zstd "$pkgbase")
+  provides=(LINUX-HEADERS)
+
+  cd "${srcdir}/${_srcname}"
+  local builddir="$pkgdir/usr/lib/modules/$(<version)/build"
+
+  install -Dt "$builddir" -m644 .config Makefile Module.symvers System.map \
+    localversion.* version vmlinux
+  install -Dt "$builddir" -m644 tools/bpf/bpftool/vmlinux.h
+  install -Dt "$builddir/kernel" -m644 kernel/Makefile
+  install -Dt "$builddir/arch/x86" -m644 arch/x86/Makefile
+  cp -t "$builddir" -a scripts
+  ln -srt "$builddir" "$builddir/scripts/gdb/vmlinux-gdb.py"
+
+  install -Dt "$builddir/tools/objtool" tools/objtool/objtool
+  if [ -f tools/bpf/resolve_btfids/resolve_btfids ]; then
+    install -Dt "$builddir/tools/bpf/resolve_btfids" tools/bpf/resolve_btfids/resolve_btfids
+  fi
+
+  cp -t "$builddir" -a include
+  cp -t "$builddir/arch/x86" -a arch/x86/include
+  install -Dt "$builddir/arch/x86/kernel" -m644 arch/x86/kernel/asm-offsets.s
+
+  install -Dt "$builddir/drivers/md" -m644 drivers/md/*.h
+  install -Dt "$builddir/net/mac80211" -m644 net/mac80211/*.h
+  install -Dt "$builddir/drivers/media/i2c" -m644 drivers/media/i2c/msp3400-driver.h
+  install -Dt "$builddir/drivers/media/usb/dvb-usb" -m644 drivers/media/usb/dvb-usb/*.h
+  install -Dt "$builddir/drivers/media/dvb-frontends" -m644 drivers/media/dvb-frontends/*.h
+  install -Dt "$builddir/drivers/media/tuners" -m644 drivers/media/tuners/*.h
+  install -Dt "$builddir/drivers/iio/common/hid-sensors" -m644 drivers/iio/common/hid-sensors/*.h
+
+  echo "Installing KConfig files..."
+  find . -name 'Kconfig*' -exec install -Dm644 {} "$builddir/{}" \;
+
+  if compgen -G "rust/*.rmeta" 1>/dev/null; then
+    install -Dt "$builddir/rust" -m644 rust/*.rmeta
+  fi
+  if compgen -G "rust/*.so" 1>/dev/null; then
+    install -Dt "$builddir/rust" -m644 rust/*.so
+  fi
+}
+
+package_linux-brokestar() { _package; }
+package_linux-brokestar-headers() { _package-headers; }
