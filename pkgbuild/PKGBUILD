@@ -1,9 +1,9 @@
 # Maintainer: brokestar
-# Based on CachyOS linux-cachyos-bore, but built from a locally modified
-# source tree (BORE + UKSM + lru_cast merged as commits, no patch files).
+# Based on CachyOS linux-cachyos, but built from a locally modified source
+# tree (BORE + lru_cast merged as commits, no patch files).
 
 pkgbase=linux-brokestar
-pkgver=7.3.5
+pkgver=7.3.6
 pkgrel=1
 _srcname=linux-cachy
 _branch=mykernel
@@ -24,14 +24,21 @@ export PATH=/usr/lib/ccache/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bi
 export MAKE=/usr/bin/make
 export LOCALVERSION=""
 
+# CachyOS official recipe: clang + lld + ThinLTO (config: LTO_CLANG_THIN).
+# clang/lld come from the cachyos repos; /usr/lib/ccache/bin/clang wraps them.
+BUILD_FLAGS=(CC=clang LD=ld.lld LLVM=1 LLVM_IAS=1)
+
 makedepends=(
   bc
   binutils
+  clang
   cpio
   gettext
   glibc
   libelf
   libgcc
+  lld
+  llvm
   openssl
   pahole
   perl
@@ -61,16 +68,16 @@ prepare() {
   # Idempotent: keep an already-built tree intact (no needless reconfigure).
   if ! cmp -s "${srcdir}/config" .config; then
     cp "${srcdir}/config" .config
-    make olddefconfig
+    make "${BUILD_FLAGS[@]}" olddefconfig
   fi
 
   # Kernel release name, used by package()/_package-headers().
-  make -s kernelrelease > version
+  make -s "${BUILD_FLAGS[@]}" kernelrelease > version
 }
 
 build() {
   cd "${srcdir}/${_srcname}"
-  make -j"$(nproc)" all
+  make "${BUILD_FLAGS[@]}" -j"$(nproc)" all
 
   # Needed by the headers package for BPF CO-RE module builds.
   make -C tools/bpf/bpftool vmlinux.h feature-clang-bpf-co-re=1
